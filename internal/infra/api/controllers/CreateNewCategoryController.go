@@ -1,17 +1,45 @@
 package controllers
 
 import (
-	"fmt"
+	"encoding/json"
 	"net/http"
+
+	"github.com/alissonFabricio04/ecommerce/backend/internal/application/usecases"
+	"github.com/alissonFabricio04/ecommerce/backend/internal/infra/api/utils"
+	"github.com/alissonFabricio04/ecommerce/backend/internal/infra/repositories"
 )
 
+type category struct {
+	Name string `json:"name"`
+}
+
 func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		fmt.Fprintf(w, "ParseForm() err: %v", err)
+	body, err := utils.BodyReader(w, r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := utils.Response{Message: "error when parsed the body"}
+		utils.SendResponse(w, response)
 		return
 	}
-	name := r.FormValue("name")
-	address := r.FormValue("address")
-	fmt.Fprintf(w, "Name = %s\n", name)
-	fmt.Fprintf(w, "Address = %s\n", address)
+
+	var category category
+	if err = json.Unmarshal(body, &category); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := utils.Response{Message: "error decoding JSON"}
+		utils.SendResponse(w, response)
+		return
+	}
+
+	usecase := usecases.InstaceNewCreateNewCategoryUseCase(repositories.NewCategoryRepositoryImpl())
+	categoryId, err := usecase.Handle(category.Name)
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		response := utils.Response{Message: err.Error()}
+		utils.SendResponse(w, response)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	responseBody := `"categoryId": "` + categoryId.ToString() + `"`
+	response := utils.Response{Message: "category created with sucess", Data: responseBody}
+	utils.SendResponse(w, response)
 }

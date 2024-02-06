@@ -9,6 +9,7 @@ import (
 )
 
 func Routes() {
+	http.HandleFunc("/all-category", controllers.GetAllCategoriesController)
 	http.HandleFunc("/create-new-category", controllers.CreateNewCategoryController)
 	http.HandleFunc("/create-new-product", controllers.CreateNewProductController)
 
