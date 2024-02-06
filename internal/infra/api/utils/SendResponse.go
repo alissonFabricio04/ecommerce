@@ -6,7 +6,7 @@ import (
 )
 
 type Response struct {
-	Data    any
+	Data    any    `json:"data"`
 	Message string `json:"message"`
 }
 
