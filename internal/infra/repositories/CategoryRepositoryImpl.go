@@ -2,8 +2,6 @@ package repositories
 
 import (
 	"github.com/alissonFabricio04/ecommerce/backend/internal/domain"
-	"github.com/alissonFabricio04/ecommerce/backend/internal/infra/models"
-	"github.com/google/uuid"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -17,31 +15,35 @@ func NewCategoryRepositoryImpl() *CategoryRepositoryImpl {
 	if err != nil {
 		panic("failed to connect database")
 	}
-	db.AutoMigrate(&models.CategoryModel{})
+	db.AutoMigrate(&CategoryModel{})
 	return &CategoryRepositoryImpl{
 		db: db,
 	}
 }
 
 func (repo *CategoryRepositoryImpl) Save(category *domain.Category) error {
-	categoryModel := &models.CategoryModel{
-		Id:   category.Id.String(),
-		Name: category.Name,
+	categoryModel := &CategoryModel{
+		Id:   category.Id.ToString(),
+		Name: category.Name.Value,
 	}
-	tx := repo.db.Create(categoryModel)
+	tx := repo.db.Create(&categoryModel)
 	if tx.Error != nil {
 		return tx.Error
 	}
 	return nil
 }
 
-func (repo *CategoryRepositoryImpl) FindByID(id *uuid.UUID) (*domain.Category, error) {
+func (repo *CategoryRepositoryImpl) FindById(id *domain.Id) (*domain.Category, error) {
 	var categoryModel CategoryModel
-	tx := repo.db.First(&categoryModel, id.String())
+	tx := repo.db.First(&categoryModel, id.ToString())
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
-	category, err := domain.RestoreCategory(categoryModel.Id, categoryModel.Name)
+	categoryId, err := domain.InstanceNewId(categoryModel.Id)
+	if err != nil {
+		return nil, err
+	}
+	category, err := domain.RestoreCategory(categoryId, categoryModel.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -49,14 +51,18 @@ func (repo *CategoryRepositoryImpl) FindByID(id *uuid.UUID) (*domain.Category, e
 }
 
 func (repo *CategoryRepositoryImpl) GetAll() ([]*domain.Category, error) {
-	var results []*CategoryModel
-	tx := repo.db.Find(&results)
+	var categoriesModel []*CategoryModel
+	tx := repo.db.Find(&categoriesModel)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
 	var categories []*domain.Category
-	for _, categoryModel := range results {
-		category, err := domain.RestoreCategory(categoryModel.Id, categoryModel.Name)
+	for _, categoryModel := range categoriesModel {
+		categoryId, err := domain.InstanceNewId(categoryModel.Id)
+		if err != nil {
+			return nil, err
+		}
+		category, err := domain.RestoreCategory(categoryId, categoryModel.Name)
 		if err != nil {
 			return nil, err
 		}

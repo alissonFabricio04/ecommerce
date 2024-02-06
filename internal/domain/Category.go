@@ -1,26 +1,28 @@
 package domain
 
-import "github.com/google/uuid"
-
 type Category struct {
-	Id   uuid.UUID
-	Name string
+	Id   *Id
+	Name *Name
 }
 
-func CreateNewCategoty(name string) *Category {
-	return &Category{
-		Id:   uuid.New(),
-		Name: name,
-	}
-}
-
-func RestoreCategory(id string, name string) (*Category, error) {
-	idIsValid, err := uuid.Parse(id)
+func CreateNewCategoty(name string) (*Category, error) {
+	nameIsValid, err := InstanceNewName(name)
 	if err != nil {
 		return nil, err
 	}
 	return &Category{
-		Id:   idIsValid,
-		Name: name,
+		Id:   CreateNewId(),
+		Name: nameIsValid,
+	}, nil
+}
+
+func RestoreCategory(id *Id, name string) (*Category, error) {
+	nameIsValid, err := InstanceNewName(name)
+	if err != nil {
+		return nil, err
+	}
+	return &Category{
+		Id:   id,
+		Name: nameIsValid,
 	}, nil
 }

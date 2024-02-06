@@ -8,7 +8,7 @@ type CategoryModel struct {
 	Name string
 }
 
-type Product struct {
+type ProductModel struct {
 	gorm.Model
 	Id          string
 	Name        string
@@ -17,7 +17,7 @@ type Product struct {
 	Fk_category string
 }
 
-type Image struct {
+type ImageModel struct {
 	gorm.Model
 	Id         string
 	Uri        string

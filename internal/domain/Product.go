@@ -1,10 +1,12 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"errors"
+)
 
 type Product struct {
-	Id          uuid.UUID
-	Name        string
+	Id          *Id
+	Name        *Name
 	Description string
 	Price       float64
 	Category    *Category
@@ -12,17 +14,22 @@ type Product struct {
 }
 
 func CreateNewProduct(name string, description string, price float64, category *Category, imgs []*Image) (*Product, error) {
-	// var images []*Image
-	// for i := 0; i < len(imgs); i++ {
-	// 	image, err := CreateNewImage(imgs[i])
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	images = append(images, image)
-	// }
+	nameIsValid, err := InstanceNewName(name)
+	if err != nil {
+		return nil, err
+	}
+	if len(description) <= 0 {
+		return nil, errors.New("the description is much short")
+	}
+	if len(description) > 120 {
+		return nil, errors.New("the description is much long")
+	}
+	if price <= 0 {
+		return nil, errors.New("the price is valid")
+	}
 	return &Product{
-		Id:          uuid.New(),
-		Name:        name,
+		Id:          CreateNewId(),
+		Name:        nameIsValid,
 		Description: description,
 		Price:       price,
 		Category:    category,
@@ -30,14 +37,14 @@ func CreateNewProduct(name string, description string, price float64, category *
 	}, nil
 }
 
-func RestoreProduct(id string, name string, description string, price float64, category *Category, imgs []*Image) (*Product, error) {
-	idIsValid, err := uuid.Parse(id)
+func RestoreProduct(id *Id, name string, description string, price float64, category *Category, imgs []*Image) (*Product, error) {
+	nameIsValid, err := InstanceNewName(name)
 	if err != nil {
 		return nil, err
 	}
 	return &Product{
-		Id:          idIsValid,
-		Name:        name,
+		Id:          id,
+		Name:        nameIsValid,
 		Description: description,
 		Price:       price,
 		Category:    category,

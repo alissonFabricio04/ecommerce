@@ -1,12 +1,8 @@
 package repositories
 
 import (
-	"database/sql"
-	"fmt"
-	"strings"
-
 	"github.com/alissonFabricio04/ecommerce/backend/internal/domain"
-	"github.com/google/uuid"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -14,159 +10,223 @@ type ProductRepositoryImpl struct {
 	db *gorm.DB
 }
 
-func NewProductRepositoryImpl(db *sql.DB) *ProductRepositoryImpl {
+func NewProductRepositoryImpl() *ProductRepositoryImpl {
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect database")
+	}
+	db.AutoMigrate(&ProductModel{})
 	return &ProductRepositoryImpl{
 		db: db,
 	}
 }
 
-func insertBatchImages(repo *ProductRepositoryImpl, productId *uuid.UUID, imgs []*domain.Image) error {
-	imgsBatchStrings := make([]string, 0, len(imgs))
-	imgsBatchArgs := make([]interface{}, 0, len(imgs)*3)
-	for _, img := range imgs {
-		imgsBatchStrings = append(imgsBatchStrings, "(?, ?, ?)")
-		imgsBatchArgs = append(imgsBatchArgs, img.Id.String())
-		imgsBatchArgs = append(imgsBatchArgs, img.Uri.String())
-		imgsBatchArgs = append(imgsBatchArgs, productId.String())
+func insertBatchImages(repo *ProductRepositoryImpl, productId *domain.Id, imgs []*domain.Image) error {
+	var imagesModel []*ImageModel
+	for i := 0; i < len(imgs); i++ {
+		imageModel := &ImageModel{
+			Id:         imgs[i].Id.String(),
+			Uri:        imgs[i].Uri.String(),
+			Fk_product: productId.ToString(),
+		}
+		imagesModel = append(imagesModel, imageModel)
 	}
-	stmt := fmt.Sprintf("INSERT INTO images (id, uri, fk_product) VALUES %s", strings.Join(imgsBatchStrings, ","))
-	_, err := repo.db.Exec(stmt, imgsBatchArgs...)
-	if err != nil {
-		return err
+	tx := repo.db.Create(&imagesModel)
+	if tx.Error != nil {
+		return tx.Error
 	}
 	return nil
 }
 
 func (repo *ProductRepositoryImpl) Save(product *domain.Product) error {
-	err := insertBatchImages(repo, &product.Id, product.Images)
+	err := insertBatchImages(repo, product.Id, product.Images)
 	if err != nil {
 		return err
 	}
-	_, err = repo.db.Exec("INSERT INTO products (id, name, description, price, fk_category) VALUES (?, ?, ?, ?, ?)", product.Id.String(), product.Name, product.Description, product.Price, product.Category.Id.String())
-	if err != nil {
-		return err
+	productModel := &ProductModel{
+		Id:          product.Id.ToString(),
+		Name:        product.Name.Value,
+		Description: product.Description,
+		Price:       product.Price,
+		Fk_category: product.Category.Id.ToString(),
+	}
+	tx := repo.db.Create(&productModel)
+	if tx.Error != nil {
+		return tx.Error
 	}
 	return nil
 }
 
-func (repo *ProductRepositoryImpl) FindByID(id *uuid.UUID) (*domain.Product, error) {
+func (repo *ProductRepositoryImpl) FindById(id *domain.Id) (*domain.Product, error) {
 	// get product
-	var product domain.Product
-	var categoryId string
-	err := repo.db.QueryRow("SELECT id, name, description, price, fk_category FROM products WHERE id = ?", id.String()).Scan(&product.Id, &product.Name, &product.Description, &product.Price, &categoryId)
+	var productModel ProductModel
+	tx := repo.db.First(&productModel, id.ToString())
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	// get category
+	var categoryModel CategoryModel
+	tx = repo.db.First(&categoryModel, productModel.Fk_category)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	categoryId, err := domain.InstanceNewId(categoryModel.Id)
+	if err != nil {
+		return nil, err
+	}
+	category, err := domain.RestoreCategory(categoryId, categoryModel.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	// get category of product
-	var category domain.Category
-	err = repo.db.QueryRow("SELECT id, name FROM categories WHERE id = ?", categoryId).Scan(&category.Id, &category.Name)
-	if err != nil {
-		return nil, err
+	// get images
+	var imagesModel []*ImageModel
+	tx = repo.db.Find(&imagesModel, "fk_product = ?", productModel.Id)
+	if tx.Error != nil {
+		return nil, tx.Error
 	}
-
-	// get images of product
-	rows, err := repo.db.Query("SELECT id, uri FROM images WHERE fk_product = ?", id.String())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	var images []*domain.Image
-	for rows.Next() {
-		var image domain.Image
-		if err := rows.Scan(&image.Id, &image.Uri); err != nil {
-			return nil, err
-		}
-		images = append(images, &image)
-	}
-
-	// restore category and images
-	product.Category = &category
-	product.Images = images
-	return &product, nil
-}
-
-func (repo *ProductRepositoryImpl) FindByCategory(categoryId *uuid.UUID) ([]*domain.Product, error) {
-	// get category of product
-	var category domain.Category
-	err := repo.db.QueryRow("SELECT id, name FROM categories WHERE id = ?", categoryId.String()).Scan(&category.Id, &category.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	// get products
-	rows, err := repo.db.Query("SELECT id, name, description, price FROM products WHERE fk_category = ?", categoryId.String())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var products []*domain.Product
-	for rows.Next() {
-		var product domain.Product
-		if err = rows.Scan(&product.Id, &product.Name, &product.Description, &product.Price); err != nil {
-			return nil, err
-		}
-
-		// get images of product
-		rows, err := repo.db.Query("SELECT id, uri FROM images WHERE fk_product = ?", product.Id.String())
+	for _, imageModel := range imagesModel {
+		image, err := domain.RestoreImage(imageModel.Id, imageModel.Uri)
 		if err != nil {
 			return nil, err
 		}
-		defer rows.Close()
+		images = append(images, image)
+	}
+
+	// restore product
+	productId, err := domain.InstanceNewId(productModel.Id)
+	if err != nil {
+		return nil, err
+	}
+	product, err := domain.RestoreProduct(
+		productId,
+		productModel.Name,
+		productModel.Description,
+		productModel.Price,
+		category,
+		images,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return product, nil
+}
+
+func (repo *ProductRepositoryImpl) FindByCategory(categoryId *domain.Id) ([]*domain.Product, error) {
+	// get category
+	var categoryModel CategoryModel
+	tx := repo.db.First(&categoryModel, categoryId.ToString())
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	categoryId, err := domain.InstanceNewId(categoryModel.Id)
+	if err != nil {
+		return nil, err
+	}
+	category, err := domain.RestoreCategory(categoryId, categoryModel.Name)
+	if err != nil {
+		return nil, err
+	}
+	// get product
+	var productsModel []*ProductModel
+	tx = repo.db.First(&productsModel, "fk_category = ?", categoryId.ToString())
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	var products []*domain.Product
+	for _, productModel := range productsModel {
+		// get images
+		var imagesModel []*ImageModel
+		tx = repo.db.Find(&imagesModel, "fk_product = ?", productModel.Id)
+		if tx.Error != nil {
+			return nil, tx.Error
+		}
 		var images []*domain.Image
-		for rows.Next() {
-			var image domain.Image
-			if err := rows.Scan(&image.Id, &image.Uri); err != nil {
+		for _, imageModel := range imagesModel {
+			image, err := domain.RestoreImage(imageModel.Id, imageModel.Uri)
+			if err != nil {
 				return nil, err
 			}
-			images = append(images, &image)
+			images = append(images, image)
 		}
-		product.Category = &category
-		product.Images = images
-		products = append(products, &product)
+
+		// restore product
+		productId, err := domain.InstanceNewId(productModel.Id)
+		if err != nil {
+			return nil, err
+		}
+		product, err := domain.RestoreProduct(
+			productId,
+			productModel.Name,
+			productModel.Description,
+			productModel.Price,
+			category,
+			images,
+		)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, product)
 	}
 	return products, nil
 }
 
 func (repo *ProductRepositoryImpl) GetAll() ([]*domain.Product, error) {
-	// get products
-	rows, err := repo.db.Query("SELECT id, name, description, price, fk_category FROM products")
-	if err != nil {
-		return nil, err
+	var productsModel []*ProductModel
+	tx := repo.db.First(&productsModel)
+	if tx.Error != nil {
+		return nil, tx.Error
 	}
-	defer rows.Close()
 	var products []*domain.Product
-	for rows.Next() {
-		var product domain.Product
-		var categoryId string
-		if err = rows.Scan(&product.Id, &product.Name, &product.Description, &product.Price, &categoryId); err != nil {
-			return nil, err
-		}
-
+	for _, productModel := range productsModel {
 		// get category
-		var category domain.Category
-		err := repo.db.QueryRow("SELECT id, name FROM categories WHERE id = ?", categoryId).Scan(&category.Id, &category.Name)
+		var categoryModel CategoryModel
+		tx = repo.db.First(&categoryModel, productModel.Fk_category)
+		if tx.Error != nil {
+			return nil, tx.Error
+		}
+		categoryId, err := domain.InstanceNewId(categoryModel.Id)
+		if err != nil {
+			return nil, err
+		}
+		category, err := domain.RestoreCategory(categoryId, categoryModel.Name)
 		if err != nil {
 			return nil, err
 		}
 
-		// get images of product
-		rows, err := repo.db.Query("SELECT id, uri FROM images WHERE fk_product = ?", product.Id.String())
-		if err != nil {
-			return nil, err
+		// get images
+		var imagesModel []*ImageModel
+		tx = repo.db.Find(&imagesModel, "fk_product = ?", productModel.Id)
+		if tx.Error != nil {
+			return nil, tx.Error
 		}
-		defer rows.Close()
 		var images []*domain.Image
-		for rows.Next() {
-			var image domain.Image
-			if err := rows.Scan(&image.Id, &image.Uri); err != nil {
+		for _, imageModel := range imagesModel {
+			image, err := domain.RestoreImage(imageModel.Id, imageModel.Uri)
+			if err != nil {
 				return nil, err
 			}
-			images = append(images, &image)
+			images = append(images, image)
 		}
-		product.Category = &category
-		product.Images = images
-		products = append(products, &product)
+		// restore product
+		productId, err := domain.InstanceNewId(productModel.Id)
+		if err != nil {
+			return nil, err
+		}
+		product, err := domain.RestoreProduct(
+			productId,
+			productModel.Name,
+			productModel.Description,
+			productModel.Price,
+			category,
+			images,
+		)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, product)
 	}
 	return products, nil
 }
