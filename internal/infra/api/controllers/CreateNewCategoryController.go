@@ -13,15 +13,19 @@ type CreateNewCategoryReq struct {
 	Name string `json:"name"`
 }
 
-type CreateNewCategoryRes struct {
+type CreateNewCategoryResSucess struct {
 	CategoryId string `json:"categoryId"`
+}
+
+type CreateNewCategoryResError struct {
+	Message string `json:"message"`
 }
 
 func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
 	body, err := utils.BodyReader(w, r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		response := utils.Response{Message: "error when parsed the body"}
+		response := CreateNewCategoryResError{Message: "error when parsed the body"}
 		utils.SendResponse(w, response)
 		return
 	}
@@ -29,7 +33,7 @@ func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
 	var category CreateNewCategoryReq
 	if err = json.Unmarshal(body, &category); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		response := utils.Response{Message: "error decoding JSON"}
+		response := CreateNewCategoryResError{Message: "error decoding JSON"}
 		utils.SendResponse(w, response)
 		return
 	}
@@ -38,11 +42,11 @@ func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
 	categoryId, err := usecase.Handle(category.Name)
 	if err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		response := utils.Response{Message: err.Error()}
+		response := CreateNewCategoryResError{Message: err.Error()}
 		utils.SendResponse(w, response)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	response := CreateNewCategoryRes{CategoryId: categoryId.ToString()}
+	response := CreateNewCategoryResSucess{CategoryId: categoryId.ToString()}
 	utils.SendResponse(w, response)
 }

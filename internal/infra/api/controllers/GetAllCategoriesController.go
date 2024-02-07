@@ -8,9 +8,13 @@ import (
 	"github.com/alissonFabricio04/ecommerce/backend/internal/infra/repositories"
 )
 
-type GetAllCategoriesRes struct {
+type GetAllCategoriesResSucess struct {
 	Id   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type GetAllCategoriesResError struct {
+	Message string `json:"message"`
 }
 
 func GetAllCategoriesController(w http.ResponseWriter, _ *http.Request) {
@@ -18,13 +22,13 @@ func GetAllCategoriesController(w http.ResponseWriter, _ *http.Request) {
 	categories, err := query.Handle()
 	if err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		response := utils.Response{Message: err.Error()}
+		response := GetAllCategoriesResError{Message: err.Error()}
 		utils.SendResponse(w, response)
 		return
 	}
-	var categoryList []GetAllCategoriesRes
+	var categoryList []GetAllCategoriesResSucess
 	for _, category := range categories {
-		categoryList = append(categoryList, GetAllCategoriesRes{
+		categoryList = append(categoryList, GetAllCategoriesResSucess{
 			Id:   category.Id.ToString(),
 			Name: category.Name.Value,
 		})
