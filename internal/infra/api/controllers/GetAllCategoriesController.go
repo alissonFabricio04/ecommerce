@@ -8,7 +8,7 @@ import (
 	"github.com/alissonFabricio04/ecommerce/backend/internal/infra/repositories"
 )
 
-type categoryResponse struct {
+type GetAllCategoriesRes struct {
 	Id   string `json:"id"`
 	Name string `json:"name"`
 }
@@ -22,14 +22,14 @@ func GetAllCategoriesController(w http.ResponseWriter, _ *http.Request) {
 		utils.SendResponse(w, response)
 		return
 	}
-	var categoryList []categoryResponse
+	var categoryList []GetAllCategoriesRes
 	for _, category := range categories {
-		categoryList = append(categoryList, categoryResponse{
+		categoryList = append(categoryList, GetAllCategoriesRes{
 			Id:   category.Id.ToString(),
 			Name: category.Name.Value,
 		})
 	}
-	w.WriteHeader(http.StatusCreated)
-	response := utils.Response{Message: "", Data: categoryList}
+	w.WriteHeader(http.StatusOK)
+	response := categoryList
 	utils.SendResponse(w, response)
 }

@@ -5,12 +5,7 @@ import (
 	"net/http"
 )
 
-type Response struct {
-	Data    any    `json:"data"`
-	Message string `json:"message"`
-}
-
-func SendResponse(w http.ResponseWriter, response Response) {
+func SendResponse(w http.ResponseWriter, response interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }

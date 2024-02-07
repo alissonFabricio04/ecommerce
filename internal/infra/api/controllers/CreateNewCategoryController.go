@@ -9,8 +9,12 @@ import (
 	"github.com/alissonFabricio04/ecommerce/backend/internal/infra/repositories"
 )
 
-type category struct {
+type CreateNewCategoryReq struct {
 	Name string `json:"name"`
+}
+
+type CreateNewCategoryRes struct {
+	CategoryId string `json:"categoryId"`
 }
 
 func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +26,7 @@ func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var category category
+	var category CreateNewCategoryReq
 	if err = json.Unmarshal(body, &category); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := utils.Response{Message: "error decoding JSON"}
@@ -39,7 +43,6 @@ func CreateNewCategoryController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	responseBody := `"categoryId": "` + categoryId.ToString() + `"`
-	response := utils.Response{Message: "category created with sucess", Data: responseBody}
+	response := CreateNewCategoryRes{CategoryId: categoryId.ToString()}
 	utils.SendResponse(w, response)
 }
